@@ -2472,6 +2472,18 @@ STEAMNETWORKINGSOCKETS_INTERFACE bool GameNetworkingSockets_Init( const SteamNet
 	return true;
 }
 
+STEAMNETWORKINGSOCKETS_INTERFACE ISteamNetworkingSockets *GameNetworkingSockets_Create( const SteamNetworkingIdentity *pIdentity, SteamNetworkingErrMsg &errMsg)
+{
+	CSteamNetworkingSockets *pSteamNetworkingSockets = new CSteamNetworkingSockets( ( CSteamNetworkingUtils *)SteamNetworkingUtils() );
+	if ( !pSteamNetworkingSockets->BInitGameNetworkingSockets( pIdentity, errMsg ) )
+	{
+		pSteamNetworkingSockets->Destroy();
+		return nullptr;
+	}
+
+	return pSteamNetworkingSockets;
+}
+
 STEAMNETWORKINGSOCKETS_INTERFACE void GameNetworkingSockets_Kill()
 {
 	SteamNetworkingGlobalLock lock( "GameNetworkingSockets_Kill" );
