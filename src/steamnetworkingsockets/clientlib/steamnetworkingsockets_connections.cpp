@@ -83,74 +83,73 @@ void CSteamNetworkingMessage::DefaultFreeData( SteamNetworkingMessage_t *pMsg )
 
 void CSteamNetworkingMessage::ReleaseFunc( SteamNetworkingMessage_t *pIMsg )
 {
-	CSteamNetworkingMessage *pMsg = static_cast<CSteamNetworkingMessage *>( pIMsg );
-
-	// Free up the buffer, if we have one
-	if ( pMsg->m_pData && pMsg->m_pfnFreeData )
-		(*pMsg->m_pfnFreeData)( pMsg );
-	pMsg->m_pData = nullptr; // Just for grins
-
-	// We must not currently be in any queue.  In fact, our parent
-	// might have been destroyed.
-	Assert( !pMsg->m_links.m_pQueue );
-	Assert( !pMsg->m_links.m_pPrev );
-	Assert( !pMsg->m_links.m_pNext );
-	Assert( !pMsg->m_linksSecondaryQueue.m_pQueue );
-	Assert( !pMsg->m_linksSecondaryQueue.m_pPrev );
-	Assert( !pMsg->m_linksSecondaryQueue.m_pNext );
-
-	// Self destruct
-	// FIXME Should avoid this dynamic memory call with some sort of pooling
-	delete pMsg;
+	CSteamMessagePool::globalMessagePool->Release( pIMsg );
 }
 
 CSteamNetworkingMessage *CSteamNetworkingMessage::New( uint32 cbSize )
 {
-	// FIXME Should avoid this dynamic memory call with some sort of pooling
-	CSteamNetworkingMessage *pMsg = new CSteamNetworkingMessage;
+	return CSteamMessagePool::globalMessagePool->Acquire( cbSize );
+}
 
+bool CSteamNetworkingMessage::Init( uint32 cbSize )
+{
 	// NOTE: Intentionally not memsetting the whole thing;
 	// this struct is pretty big.
 
 	// Allocate buffer if requested
-	if ( cbSize )
+	if (cbSize)
 	{
-		pMsg->m_pData = malloc( cbSize );
-		if ( pMsg->m_pData == nullptr )
+		m_pData = malloc( cbSize );
+		if ( m_pData == nullptr )
 		{
-			delete pMsg;
 			SpewError( "Failed to allocate %d-byte message buffer", cbSize );
-			return nullptr;
+			return false;
 		}
-		pMsg->m_cbSize = cbSize;
-		pMsg->m_pfnFreeData = CSteamNetworkingMessage::DefaultFreeData;
+		m_cbSize = cbSize;
+		m_pfnFreeData = CSteamNetworkingMessage::DefaultFreeData;
 	}
 	else
 	{
-		pMsg->m_cbSize = 0;
-		pMsg->m_pData = nullptr;
-		pMsg->m_pfnFreeData = nullptr;
+		m_cbSize = 0;
+		m_pData = nullptr;
+		m_pfnFreeData = nullptr;
 	}
 
 	// Clear identity
-	pMsg->m_conn = k_HSteamNetConnection_Invalid;
-	pMsg->m_identityPeer.m_eType = k_ESteamNetworkingIdentityType_Invalid;
-	pMsg->m_identityPeer.m_cbSize = 0;
+	m_conn = k_HSteamNetConnection_Invalid;
+	m_identityPeer.m_eType = k_ESteamNetworkingIdentityType_Invalid;
+	m_identityPeer.m_cbSize = 0;
 
 	// Set the release function
-	pMsg->m_pfnRelease = ReleaseFunc;
+	m_pfnRelease = ReleaseFunc;
 
 	// Clear these fields
-	pMsg->m_nConnUserData = 0;
-	pMsg->m_usecTimeReceived = 0;
-	pMsg->m_nMessageNumber = 0;
-	pMsg->m_nChannel = -1;
-	pMsg->m_nFlags = 0;
-	pMsg->m_idxLane = 0;
-	pMsg->m_links.Clear();
-	pMsg->m_linksSecondaryQueue.Clear();
+	m_nConnUserData = 0;
+	m_usecTimeReceived = 0;
+	m_nMessageNumber = 0;
+	m_nChannel = -1;
+	m_nFlags = 0;
+	m_idxLane = 0;
+	m_links.Clear();
+	m_linksSecondaryQueue.Clear();
+	return true;
+}
 
-	return pMsg;
+void CSteamNetworkingMessage::Clear(  )
+{
+	// Free up the buffer, if we have one
+	if ( m_pData && m_pfnFreeData )
+		(*m_pfnFreeData)( this );
+	m_pData = nullptr; // Just for grins
+
+	// We must not currently be in any queue.  In fact, our parent
+	// might have been destroyed.
+	Assert( !m_links.m_pQueue );
+	Assert( !m_links.m_pPrev );
+	Assert( !m_links.m_pNext );
+	Assert( !m_linksSecondaryQueue.m_pQueue );
+	Assert( !m_linksSecondaryQueue.m_pPrev );
+	Assert( !m_linksSecondaryQueue.m_pNext );
 }
 
 void CSteamNetworkingMessage::Unlink()
@@ -200,6 +199,80 @@ int SteamNetworkingMessageQueue::RemoveMessages( SteamNetworkingMessage_t **ppOu
 	}
 
 	return nMessagesReturned;
+}
+
+/////////////////////////////////////////////////////////////////////////////
+//
+// Message pool
+//
+/////////////////////////////////////////////////////////////////////////////
+
+ShortDurationLock s_poolLock("MessagePool");
+
+CSteamMessagePool* CSteamMessagePool::globalMessagePool = new CSteamMessagePool();
+
+CSteamMessagePool::CSteamMessagePool() : m_front(0), m_tail(0), m_size(1024)
+{
+	m_pool = new CSteamNetworkingMessage * [m_size];
+}
+
+CSteamNetworkingMessage* CSteamMessagePool::Acquire(uint32 cbSize)
+{
+	s_poolLock.lock();
+	if (m_front < m_tail)
+	{
+		CSteamNetworkingMessage* pMsg = m_pool[m_front++];
+		s_poolLock.unlock();
+		pMsg->Init(cbSize);
+		return pMsg;
+	}
+
+	s_poolLock.unlock();
+	CSteamNetworkingMessage* pMsg = new CSteamNetworkingMessage;
+	if (pMsg->Init(cbSize))
+	{
+		return pMsg;
+	}
+	delete pMsg;
+	return nullptr;
+}
+
+void CSteamMessagePool::Release(SteamNetworkingMessage_t* pIMsg)
+{
+	CSteamNetworkingMessage* pMsg = static_cast<CSteamNetworkingMessage*>(pIMsg);
+	pMsg->Clear();
+	s_poolLock.lock();
+	if (m_tail == m_size)
+	{
+		Resize();
+	}
+	m_pool[m_tail++] = pMsg;
+	s_poolLock.unlock();
+}
+
+void CSteamMessagePool::Resize()
+{
+	int32 size = m_size * 2;
+	CSteamNetworkingMessage** pool = new CSteamNetworkingMessage * [size];
+	for (int32 i = 0; i < m_size; i++)
+	{
+		pool[i] = m_pool[i];
+	}
+	m_pool = pool;
+	m_size = size;
+}
+
+CSteamMessagePool::~CSteamMessagePool()
+{
+	for (int i = 0; i < m_size; i++)
+	{
+		if (m_pool[i] != nullptr)
+		{
+			delete m_pool[i];
+			m_pool[i] = nullptr;
+		}
+	}
+	m_pool = nullptr;
 }
 
 /////////////////////////////////////////////////////////////////////////////
@@ -1642,7 +1715,7 @@ ESteamNetConnectionEnd CSteamNetworkConnectionBase::FinishCryptoHandshake( bool 
 		return k_ESteamNetConnectionEnd_Remote_BadCrypt;
 	}
 
-	// Diffie–Hellman key exchange to get "premaster secret"
+	// Diffieâ€“Hellman key exchange to get "premaster secret"
 	AutoWipeFixedSizeBuffer<sizeof(SHA256Digest_t)> premasterSecret;
 	if ( !CCrypto::PerformKeyExchange( m_keyExchangePrivateKeyLocal, keyExchangePublicKeyRemote, &premasterSecret.m_buf ) )
 	{

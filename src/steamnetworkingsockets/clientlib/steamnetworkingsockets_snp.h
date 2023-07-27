@@ -85,6 +85,13 @@ public:
 	static CSteamNetworkingMessage *New( uint32 cbSize );
 	static void DefaultFreeData( SteamNetworkingMessage_t *pMsg );
 
+	// Use New and Release()!!
+	inline CSteamNetworkingMessage() {}
+	inline ~CSteamNetworkingMessage() {}
+
+	bool Init( uint32 cbSize );
+	void Clear(  );
+
 	/// OK to delay sending this message until this time.  Set to zero to explicitly force
 	/// Nagle timer to expire and send now (but this should behave the same as if the
 	/// timer < usecNow).  If the timer is cleared, then all messages with lower message numbers
@@ -170,10 +177,25 @@ public:
 	void UnlinkFromQueue( Links CSteamNetworkingMessage::*pMbrLinks );
 
 private:
-	// Use New and Release()!!
-	inline CSteamNetworkingMessage() {}
-	inline ~CSteamNetworkingMessage() {}
 	static void ReleaseFunc( SteamNetworkingMessage_t *pIMsg );
+};
+
+class CSteamMessagePool
+{
+public:
+	static CSteamMessagePool* globalMessagePool;
+	CSteamMessagePool();
+	CSteamNetworkingMessage* Acquire(uint32 cbSize);
+	void Release(SteamNetworkingMessage_t* pIMsg);
+
+private:
+	CSteamNetworkingMessage** m_pool;
+	int32 m_size;
+	int32 m_front;
+	int32 m_tail;
+	void Resize();
+	~CSteamMessagePool();
+
 };
 
 /// A doubly-linked list of CSteamNetworkingMessage
