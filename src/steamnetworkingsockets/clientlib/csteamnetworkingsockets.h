@@ -292,6 +292,7 @@ public:
 	virtual ~CSteamNetworkingUtils();
 
 	virtual SteamNetworkingMessage_t *AllocateMessage( int cbAllocateBuffer ) override;
+	virtual void SetCustomMessageDataMemoryManagement( MessageDataAllocator fnAllocator, MessageDataDeallocator fnDeallocator ) override;
 
 	virtual SteamNetworkingMicroseconds GetLocalTimestamp() override;
 	virtual void SetDebugOutputFunction( ESteamNetworkingSocketsDebugOutputType eDetailLevel, FSteamNetworkingSocketsDebugOutput pfnFunc ) override;

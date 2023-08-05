@@ -196,6 +196,12 @@ STEAMNETWORKINGSOCKETS_INTERFACE SteamNetworkingMessage_t * SteamAPI_ISteamNetwo
 {
 	return self->AllocateMessage( cbAllocateBuffer );
 }
+
+STEAMNETWORKINGSOCKETS_INTERFACE void SteamAPI_ISteamNetworkingUtils_SetCustomMessageDataMemoryManagement(ISteamNetworkingUtils* self, MessageDataAllocator fnAllocator, MessageDataDeallocator fnDeallocator)
+{
+	return self->SetCustomMessageDataMemoryManagement(fnAllocator, fnDeallocator);
+}
+
 #ifdef STEAMNETWORKINGSOCKETS_ENABLE_SDR
 STEAMNETWORKINGSOCKETS_INTERFACE void SteamAPI_ISteamNetworkingUtils_InitRelayNetworkAccess( ISteamNetworkingUtils* self )
 {

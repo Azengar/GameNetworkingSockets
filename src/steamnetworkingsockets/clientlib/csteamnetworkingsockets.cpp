@@ -1801,6 +1801,20 @@ SteamNetworkingMessage_t *CSteamNetworkingUtils::AllocateMessage( int cbAllocate
 	return CSteamNetworkingMessage::New( cbAllocateBuffer );
 }
 
+void CSteamNetworkingUtils::SetCustomMessageDataMemoryManagement( MessageDataAllocator fnAllocator, MessageDataDeallocator fnDeallocator )
+{
+	if (fnAllocator == nullptr)
+	{
+		fnAllocator = &malloc;
+	}
+	if (fnDeallocator == nullptr)
+	{
+		fnDeallocator = CSteamNetworkingMessage::DefaultFreeData;
+	}
+	CSteamNetworkingMessage::customMessageDataAllocator = fnAllocator;
+	CSteamNetworkingMessage::customMessageDataDeallocator = fnDeallocator;
+}
+
 SteamNetworkingMicroseconds CSteamNetworkingUtils::GetLocalTimestamp()
 {
 	return SteamNetworkingSockets_GetLocalTimestamp();

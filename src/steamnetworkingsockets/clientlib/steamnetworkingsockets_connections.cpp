@@ -75,6 +75,9 @@ bool BCheckGlobalSpamReplyRateLimit( SteamNetworkingMicroseconds usecNow )
 //
 /////////////////////////////////////////////////////////////////////////////
 
+MessageDataAllocator CSteamNetworkingMessage::customMessageDataAllocator = &malloc;
+MessageDataDeallocator CSteamNetworkingMessage::customMessageDataDeallocator = &CSteamNetworkingMessage::DefaultFreeData;
+
 void CSteamNetworkingMessage::DefaultFreeData( SteamNetworkingMessage_t *pMsg )
 {
 	free( pMsg->m_pData );
@@ -115,7 +118,7 @@ CSteamNetworkingMessage *CSteamNetworkingMessage::New( uint32 cbSize )
 	// Allocate buffer if requested
 	if ( cbSize )
 	{
-		pMsg->m_pData = malloc( cbSize );
+		pMsg->m_pData = CSteamNetworkingMessage::customMessageDataAllocator( cbSize );
 		if ( pMsg->m_pData == nullptr )
 		{
 			delete pMsg;
@@ -123,7 +126,7 @@ CSteamNetworkingMessage *CSteamNetworkingMessage::New( uint32 cbSize )
 			return nullptr;
 		}
 		pMsg->m_cbSize = cbSize;
-		pMsg->m_pfnFreeData = CSteamNetworkingMessage::DefaultFreeData;
+		pMsg->m_pfnFreeData = CSteamNetworkingMessage::customMessageDataDeallocator;
 	}
 	else
 	{
@@ -1642,7 +1645,7 @@ ESteamNetConnectionEnd CSteamNetworkConnectionBase::FinishCryptoHandshake( bool 
 		return k_ESteamNetConnectionEnd_Remote_BadCrypt;
 	}
 
-	// Diffie–Hellman key exchange to get "premaster secret"
+	// Diffieâ€“Hellman key exchange to get "premaster secret"
 	AutoWipeFixedSizeBuffer<sizeof(SHA256Digest_t)> premasterSecret;
 	if ( !CCrypto::PerformKeyExchange( m_keyExchangePrivateKeyLocal, keyExchangePublicKeyRemote, &premasterSecret.m_buf ) )
 	{

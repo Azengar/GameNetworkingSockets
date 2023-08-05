@@ -14,6 +14,9 @@
 struct SteamDatagramRelayAuthTicket;
 struct SteamRelayNetworkStatus_t;
 
+typedef void* (*MessageDataAllocator)( size_t size );
+typedef void (*MessageDataDeallocator)( SteamNetworkingMessage_t* pMsg );
+
 //-----------------------------------------------------------------------------
 /// Misc networking utilities for checking the local networking environment
 /// and estimating pings.
@@ -39,6 +42,8 @@ public:
 	/// m_cbSize will be zero, and m_pfnFreeData will be NULL.  You will need to
 	/// set each of these.
 	virtual SteamNetworkingMessage_t *AllocateMessage( int cbAllocateBuffer ) = 0;
+
+	virtual void SetCustomMessageDataMemoryManagement( MessageDataAllocator fnAllocator, MessageDataDeallocator fnDeallocator ) = 0;
 
 	//
 	// Access to Steam Datagram Relay (SDR) network
